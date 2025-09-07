@@ -292,10 +292,18 @@
                 </div>
 
                 <!-- Note Info -->
-                <div class="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-4">
+                <div id="securityNotice" class="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-4">
                     <div class="flex items-center text-orange-800 text-sm">
                         <span class="mr-2">⚠️</span>
                         <span><strong>Security Notice:</strong> This note will self-destruct. Save any important information now.</span>
+                    </div>
+                </div>
+
+                <!-- Last View Warning -->
+                <div id="lastViewWarning" class="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 hidden">
+                    <div class="flex items-center text-red-800 text-sm">
+                        <span class="mr-2">🔥</span>
+                        <span><strong>Final Warning:</strong> This note will be permanently deleted in 30 seconds after reaching its view limit!</span>
                     </div>
                 </div>
 
@@ -462,39 +470,51 @@
             const noteRecord = notes[noteId];
             
             if (!noteRecord) {
-                showNoteExpired();
+                showNoteExpired('Note not found or has been deleted.');
                 return;
             }
             
-            // Check if note has expired
-            if (new Date(noteRecord.expiresAt) < new Date()) {
+            // Check if note has expired by time
+            const now = new Date();
+            const expiryTime = new Date(noteRecord.expiresAt);
+            
+            if (expiryTime <= now) {
                 // Delete expired note
                 delete notes[noteId];
                 localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
-                showNoteExpired();
+                showNoteExpired(`This note expired on ${expiryTime.toLocaleString()}.`);
                 return;
             }
             
-            // Check view limit
+            // Check view limit BEFORE incrementing
             if (noteRecord.viewLimit > 0 && noteRecord.viewCount >= noteRecord.viewLimit) {
                 // Delete note that exceeded view limit
                 delete notes[noteId];
                 localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
-                showNoteExpired();
+                showNoteExpired(`This note has reached its maximum view limit of ${noteRecord.viewLimit} views.`);
                 return;
             }
             
             // Get encryption key from URL hash
             const encryptionKey = window.location.hash.substring(1);
             if (!encryptionKey) {
-                showNoteExpired();
+                showNoteExpired('Invalid or missing encryption key in the link.');
                 return;
             }
             
             // Decrypt note data
             const decryptedData = decryptData(noteRecord.data, encryptionKey);
             if (!decryptedData) {
-                showNoteExpired();
+                showNoteExpired('Unable to decrypt note. The link may be corrupted.');
+                return;
+            }
+            
+            // Double-check expiry from decrypted data
+            const decryptedExpiry = new Date(decryptedData.expiresAt);
+            if (decryptedExpiry <= now) {
+                delete notes[noteId];
+                localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+                showNoteExpired(`This note expired on ${decryptedExpiry.toLocaleString()}.`);
                 return;
             }
             
@@ -536,9 +556,11 @@
         }
 
         function displayNote(noteId, noteRecord, decryptedData) {
-            // Increment view count
+            // Increment view count AFTER all checks pass
             const notes = JSON.parse(localStorage.getItem(NOTES_KEY) || '{}');
-            notes[noteId].viewCount++;
+            const currentViewCount = notes[noteId].viewCount;
+            notes[noteId].viewCount = currentViewCount + 1;
+            const newViewCount = notes[noteId].viewCount;
             localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
             
             // Show note display
@@ -549,13 +571,42 @@
             document.getElementById('displayTitle').textContent = decryptedData.title;
             document.getElementById('displayContent').textContent = decryptedData.content;
             
-            // Update views remaining
+            // Update views remaining with accurate count
             const viewsRemaining = document.getElementById('viewsRemaining');
             if (noteRecord.viewLimit > 0) {
-                const remaining = noteRecord.viewLimit - notes[noteId].viewCount;
+                const remaining = noteRecord.viewLimit - newViewCount;
                 viewsRemaining.textContent = `👁️ ${remaining} views remaining`;
+                
+                // Show warning for last few views
                 if (remaining <= 1) {
                     viewsRemaining.classList.add('text-red-600', 'font-bold');
+                    viewsRemaining.textContent = remaining === 0 ? '⚠️ This was the last view!' : '⚠️ 1 view remaining!';
+                } else if (remaining <= 3) {
+                    viewsRemaining.classList.add('text-orange-600', 'font-semibold');
+                }
+                
+                // If this was the last allowed view, schedule deletion
+                if (remaining <= 0) {
+                    // Show final warning
+                    document.getElementById('lastViewWarning').classList.remove('hidden');
+                    document.getElementById('securityNotice').classList.add('hidden');
+                    
+                    // Start 30-second countdown to deletion
+                    let countdown = 30;
+                    const warningElement = document.getElementById('lastViewWarning').querySelector('span:last-child');
+                    
+                    const finalCountdown = setInterval(() => {
+                        countdown--;
+                        warningElement.innerHTML = `<strong>Final Warning:</strong> This note will be permanently deleted in ${countdown} seconds after reaching its view limit!`;
+                        
+                        if (countdown <= 0) {
+                            clearInterval(finalCountdown);
+                            burnNoteById(noteId);
+                        }
+                    }, 1000);
+                    
+                    // Store interval for cleanup
+                    window.finalCountdownInterval = finalCountdown;
                 }
             } else {
                 viewsRemaining.textContent = '👁️ Unlimited views';
@@ -565,7 +616,13 @@
             startCountdown(decryptedData.expiresAt, noteId);
             
             // Store current note data for actions
-            window.currentNote = { noteId, noteRecord, decryptedData };
+            window.currentNote = { noteId, noteRecord: notes[noteId], decryptedData };
+            
+            // Show view count info
+            const viewInfo = document.createElement('div');
+            viewInfo.className = 'text-xs text-gray-500 mt-2';
+            viewInfo.textContent = `View #${newViewCount}${noteRecord.viewLimit > 0 ? ` of ${noteRecord.viewLimit}` : ''}`;
+            document.getElementById('viewsRemaining').appendChild(viewInfo);
         }
 
         function startCountdown(expiresAt, noteId) {
@@ -578,6 +635,7 @@
                 
                 if (timeLeft <= 0) {
                     // Note expired, burn it
+                    clearInterval(countdownInterval);
                     burnNoteById(noteId);
                     return;
                 }
@@ -598,6 +656,8 @@
                 // Add urgency styling for last minute
                 if (timeLeft < 60000) { // Less than 1 minute
                     countdownDisplay.classList.add('text-red-500', 'pulse-animation');
+                } else if (timeLeft < 300000) { // Less than 5 minutes
+                    countdownDisplay.classList.add('text-orange-500');
                 }
             }
             
@@ -697,11 +757,19 @@
             document.getElementById('viewNoteView').classList.remove('hidden');
         }
 
-        function showNoteExpired() {
+        function showNoteExpired(reason = 'This note has either expired, been viewed too many times, or doesn\'t exist.') {
             showViewNoteView();
             document.getElementById('passwordEntry').classList.add('hidden');
             document.getElementById('noteDisplay').classList.add('hidden');
-            document.getElementById('noteExpired').classList.remove('hidden');
+            
+            const noteExpired = document.getElementById('noteExpired');
+            noteExpired.classList.remove('hidden');
+            
+            // Update the reason text
+            const reasonElement = noteExpired.querySelector('p');
+            if (reasonElement) {
+                reasonElement.textContent = reason;
+            }
         }
 
         function showNoteBurned() {
@@ -821,7 +889,10 @@
             if (countdownInterval) {
                 clearInterval(countdownInterval);
             }
+            if (window.finalCountdownInterval) {
+                clearInterval(window.finalCountdownInterval);
+            }
         });
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97b3a6736581c4f0',t:'MTc1NzIyMTMwNy4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97b3dd50d395134c',t:'MTc1NzIyMzU1NC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
