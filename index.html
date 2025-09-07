@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexora - Secure Note Sharing</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .gradient-bg { background: linear-gradient(135deg, #ff4500 0%, #000000 100%); }
+        .glass-effect { 
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .note-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+        .note-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 35px rgba(255, 69, 0, 0.2);
+        }
+        .pulse-animation {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        .countdown-timer {
+            background: linear-gradient(45deg, #ff4500, #ff6b35);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: 700;
+        }
+        .encrypted-badge {
+            background: linear-gradient(45deg, #00ff00, #32cd32);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .burn-animation {
+            animation: burn 0.5s ease-in-out;
+        }
+        @keyframes burn {
+            0% { transform: scale(1) rotate(0deg); opacity: 1; }
+            50% { transform: scale(1.1) rotate(2deg); opacity: 0.8; }
+            100% { transform: scale(0.9) rotate(-1deg); opacity: 0; }
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-5xl md:text-6xl font-bold text-white mb-4">
+                🔥 Nexora
+            </h1>
+            <p class="text-xl text-white/90 mb-2">
+                Secure Encrypted Note Sharing
+            </p>
+            <p class="text-sm text-white/70">
+                End-to-end encrypted • Self-destructing • Zero-knowledge
+            </p>
+        </div>
+
+        <!-- Create Note View -->
+        <div id="createView" class="space-y-8">
+            <div class="glass-effect rounded-2xl p-8">
+                <div class="text-center mb-6">
+                    <h2 class="text-2xl font-semibold text-white mb-2 flex items-center justify-center">
+                        <span class="mr-3">🔐</span>
+                        Create Secure Note
+                    </h2>
+                    <p class="text-white/80">Your note will be encrypted before leaving your device</p>
+                </div>
+                
+                <div class="space-y-6">
+                    <!-- Note Title -->
+                    <div>
+                        <label class="block text-white/90 text-sm font-medium mb-2">Note Title (Optional)</label>
+                        <input 
+                            type="text" 
+                            id="noteTitle" 
+                            placeholder="Enter a title for your note..."
+                            maxlength="100"
+                            class="w-full px-4 py-3 rounded-xl border-0 bg-white/20 text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        >
+                    </div>
+
+                    <!-- Note Content -->
+                    <div>
+                        <label class="block text-white/90 text-sm font-medium mb-2">Note Content</label>
+                        <textarea 
+                            id="noteContent" 
+                            placeholder="Write your secure note here... This will be encrypted and can only be viewed by people with the link."
+                            rows="8"
+                            maxlength="10000"
+                            class="w-full px-4 py-3 rounded-xl border-0 bg-white/20 text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none"
+                        ></textarea>
+                        <div class="text-right text-white/60 text-xs mt-1">
+                            <span id="charCount">0</span>/10,000 characters
+                        </div>
+                    </div>
+
+                    <!-- Security Options -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Self-Destruct Timer -->
+                        <div>
+                            <label class="block text-white/90 text-sm font-medium mb-2">🔥 Self-Destruct Timer</label>
+                            <select 
+                                id="destructTimer" 
+                                class="w-full px-4 py-3 rounded-xl border-0 bg-white/20 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                            >
+                                <option value="300" class="text-black">5 minutes</option>
+                                <option value="900" class="text-black">15 minutes</option>
+                                <option value="1800" class="text-black">30 minutes</option>
+                                <option value="3600" class="text-black" selected>1 hour</option>
+                                <option value="7200" class="text-black">2 hours</option>
+                                <option value="21600" class="text-black">6 hours</option>
+                                <option value="43200" class="text-black">12 hours</option>
+                                <option value="86400" class="text-black">24 hours</option>
+                                <option value="259200" class="text-black">3 days</option>
+                                <option value="604800" class="text-black">7 days</option>
+                            </select>
+                        </div>
+
+                        <!-- View Limit -->
+                        <div>
+                            <label class="block text-white/90 text-sm font-medium mb-2">👁️ View Limit</label>
+                            <select 
+                                id="viewLimit" 
+                                class="w-full px-4 py-3 rounded-xl border-0 bg-white/20 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                            >
+                                <option value="1" class="text-black">1 view (burn after reading)</option>
+                                <option value="3" class="text-black">3 views</option>
+                                <option value="5" class="text-black" selected>5 views</option>
+                                <option value="10" class="text-black">10 views</option>
+                                <option value="25" class="text-black">25 views</option>
+                                <option value="50" class="text-black">50 views</option>
+                                <option value="100" class="text-black">100 views</option>
+                                <option value="-1" class="text-black">Unlimited views</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Password Protection -->
+                    <div>
+                        <label class="block text-white/90 text-sm font-medium mb-2">🔑 Password Protection (Optional)</label>
+                        <input 
+                            type="password" 
+                            id="notePassword" 
+                            placeholder="Enter a password to protect this note..."
+                            maxlength="50"
+                            class="w-full px-4 py-3 rounded-xl border-0 bg-white/20 text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        >
+                        <p class="text-white/60 text-xs mt-1">Leave empty for no password protection</p>
+                    </div>
+
+                    <!-- Create Button -->
+                    <button 
+                        onclick="createNote()" 
+                        class="w-full bg-gradient-to-r from-orange-500 to-red-600 text-white font-bold py-4 px-8 rounded-xl hover:from-orange-600 hover:to-red-700 transition-all duration-300 transform hover:scale-105 text-lg"
+                    >
+                        🔐 Create Encrypted Note
+                    </button>
+                </div>
+            </div>
+
+            <!-- Security Features -->
+            <div class="glass-effect rounded-2xl p-6">
+                <h3 class="text-xl font-semibold text-white mb-4 text-center">🛡️ Security Features</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                    <div class="bg-white/10 rounded-xl p-4">
+                        <div class="text-2xl mb-2">🔒</div>
+                        <h4 class="text-white font-semibold mb-1">End-to-End Encryption</h4>
+                        <p class="text-white/70 text-sm">AES-256 encryption happens in your browser</p>
+                    </div>
+                    <div class="bg-white/10 rounded-xl p-4">
+                        <div class="text-2xl mb-2">🔥</div>
+                        <h4 class="text-white font-semibold mb-1">Self-Destructing</h4>
+                        <p class="text-white/70 text-sm">Notes automatically delete after time/views</p>
+                    </div>
+                    <div class="bg-white/10 rounded-xl p-4">
+                        <div class="text-2xl mb-2">🚫</div>
+                        <h4 class="text-white font-semibold mb-1">Zero Knowledge</h4>
+                        <p class="text-white/70 text-sm">We never see your unencrypted content</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Note Created Success View -->
+        <div id="successView" class="space-y-8 hidden">
+            <div class="glass-effect rounded-2xl p-8 text-center">
+                <div class="text-6xl mb-4">✅</div>
+                <h2 class="text-3xl font-bold text-white mb-4">Note Created Successfully!</h2>
+                <p class="text-white/90 mb-6">Your note has been encrypted and is ready to share</p>
+                
+                <!-- Share Link -->
+                <div class="bg-white/20 rounded-xl p-6 mb-6">
+                    <label class="block text-white/90 text-sm font-medium mb-2">🔗 Secure Share Link</label>
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <input 
+                            type="text" 
+                            id="shareLink" 
+                            readonly 
+                            class="flex-1 px-4 py-3 bg-white rounded-xl text-gray-800 text-sm font-mono"
+                        >
+                        <button 
+                            onclick="copyShareLink()" 
+                            class="bg-green-500 text-white px-6 py-3 rounded-xl hover:bg-green-600 transition-colors font-medium"
+                        >
+                            📋 Copy Link
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Note Details -->
+                <div id="noteDetails" class="bg-white/10 rounded-xl p-4 mb-6 text-left">
+                    <!-- Details will be populated by JavaScript -->
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex flex-col sm:flex-row gap-4">
+                    <button 
+                        onclick="shareNote()" 
+                        class="flex-1 bg-blue-500 text-white font-semibold py-3 px-6 rounded-xl hover:bg-blue-600 transition-colors"
+                    >
+                        📤 Share Note
+                    </button>
+                    <button 
+                        onclick="createAnother()" 
+                        class="flex-1 bg-orange-500 text-white font-semibold py-3 px-6 rounded-xl hover:bg-orange-600 transition-colors"
+                    >
+                        📝 Create Another
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- View Note -->
+        <div id="viewNoteView" class="space-y-8 hidden">
+            <!-- Password Entry (if required) -->
+            <div id="passwordEntry" class="glass-effect rounded-2xl p-8 text-center hidden">
+                <div class="text-4xl mb-4">🔑</div>
+                <h2 class="text-2xl font-semibold text-white mb-4">Password Required</h2>
+                <p class="text-white/80 mb-6">This note is password protected</p>
+                
+                <div class="max-w-md mx-auto space-y-4">
+                    <input 
+                        type="password" 
+                        id="viewPassword" 
+                        placeholder="Enter password to view note"
+                        class="w-full px-4 py-3 rounded-xl border-0 bg-white/20 text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        onkeypress="if(event.key==='Enter') unlockNote()"
+                    >
+                    <button 
+                        onclick="unlockNote()" 
+                        class="w-full bg-orange-500 text-white font-semibold py-3 px-6 rounded-xl hover:bg-orange-600 transition-colors"
+                    >
+                        🔓 Unlock Note
+                    </button>
+                </div>
+            </div>
+
+            <!-- Note Content Display -->
+            <div id="noteDisplay" class="note-card rounded-2xl p-8 hidden">
+                <!-- Note Header -->
+                <div class="flex flex-col sm:flex-row justify-between items-start mb-6 pb-4 border-b border-gray-200">
+                    <div>
+                        <h2 id="displayTitle" class="text-2xl font-bold text-gray-800 mb-2"></h2>
+                        <div class="flex flex-wrap gap-2 text-sm">
+                            <span class="encrypted-badge font-semibold">🔐 Encrypted</span>
+                            <span id="viewsRemaining" class="text-orange-600 font-medium"></span>
+                        </div>
+                    </div>
+                    <div class="mt-4 sm:mt-0 text-right">
+                        <div id="countdownDisplay" class="countdown-timer text-lg font-bold mb-1"></div>
+                        <div class="text-xs text-gray-500">Time remaining</div>
+                    </div>
+                </div>
+
+                <!-- Note Content -->
+                <div class="mb-6">
+                    <div id="displayContent" class="text-gray-800 leading-relaxed whitespace-pre-wrap bg-gray-50 p-4 rounded-xl border"></div>
+                </div>
+
+                <!-- Note Info -->
+                <div class="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-4">
+                    <div class="flex items-center text-orange-800 text-sm">
+                        <span class="mr-2">⚠️</span>
+                        <span><strong>Security Notice:</strong> This note will self-destruct. Save any important information now.</span>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="flex flex-col sm:flex-row gap-3">
+                    <button 
+                        onclick="copyNoteContent()" 
+                        class="flex-1 bg-blue-500 text-white font-semibold py-3 px-6 rounded-xl hover:bg-blue-600 transition-colors"
+                    >
+                        📋 Copy Content
+                    </button>
+                    <button 
+                        onclick="burnNote()" 
+                        class="flex-1 bg-red-500 text-white font-semibold py-3 px-6 rounded-xl hover:bg-red-600 transition-colors"
+                    >
+                        🔥 Burn Now
+                    </button>
+                </div>
+            </div>
+
+            <!-- Note Expired/Not Found -->
+            <div id="noteExpired" class="glass-effect rounded-2xl p-8 text-center hidden">
+                <div class="text-6xl mb-4">🔥</div>
+                <h2 class="text-2xl font-semibold text-white mb-4">Note Not Available</h2>
+                <p class="text-white/80 mb-6">This note has either expired, been viewed too many times, or doesn't exist.</p>
+                <button 
+                    onclick="goHome()" 
+                    class="bg-orange-500 text-white font-semibold py-3 px-6 rounded-xl hover:bg-orange-600 transition-colors"
+                >
+                    🏠 Create New Note
+                </button>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center mt-12 text-white/60 text-sm">
+            <p>© 2024 Nexora - Secure Note Sharing Platform</p>
+            <p class="mt-1">End-to-end encrypted • Zero-knowledge • Self-destructing</p>
+        </div>
+    </div>
+
+    <script>
+        // Storage keys and configuration
+        const NOTES_KEY = 'nexora_encrypted_notes';
+        const NOTE_PREFIX = 'nexora_note_';
+        
+        let currentNoteId = null;
+        let countdownInterval = null;
+
+        // Initialize app
+        function init() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const noteId = urlParams.get('note');
+            
+            if (noteId) {
+                currentNoteId = noteId;
+                loadNote(noteId);
+            } else {
+                showCreateView();
+            }
+            
+            // Setup character counter
+            const noteContent = document.getElementById('noteContent');
+            const charCount = document.getElementById('charCount');
+            
+            if (noteContent && charCount) {
+                noteContent.addEventListener('input', function() {
+                    charCount.textContent = this.value.length;
+                });
+            }
+        }
+
+        // Encryption functions using CryptoJS
+        function generateKey() {
+            return CryptoJS.lib.WordArray.random(256/8).toString();
+        }
+
+        function encryptData(data, key) {
+            return CryptoJS.AES.encrypt(JSON.stringify(data), key).toString();
+        }
+
+        function decryptData(encryptedData, key) {
+            try {
+                const bytes = CryptoJS.AES.decrypt(encryptedData, key);
+                const decryptedData = bytes.toString(CryptoJS.enc.Utf8);
+                return JSON.parse(decryptedData);
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function hashPassword(password) {
+            return CryptoJS.SHA256(password).toString();
+        }
+
+        // Create encrypted note
+        function createNote() {
+            const title = document.getElementById('noteTitle').value.trim();
+            const content = document.getElementById('noteContent').value.trim();
+            const destructTimer = parseInt(document.getElementById('destructTimer').value);
+            const viewLimit = parseInt(document.getElementById('viewLimit').value);
+            const password = document.getElementById('notePassword').value;
+            
+            if (!content) {
+                alert('Please enter note content!');
+                return;
+            }
+            
+            // Generate unique note ID and encryption key
+            const noteId = generateNoteId();
+            const encryptionKey = generateKey();
+            
+            // Prepare note data
+            const noteData = {
+                title: title || 'Untitled Note',
+                content: content,
+                createdAt: new Date().toISOString(),
+                expiresAt: new Date(Date.now() + destructTimer * 1000).toISOString(),
+                viewLimit: viewLimit,
+                viewCount: 0,
+                hasPassword: !!password,
+                passwordHash: password ? hashPassword(password) : null
+            };
+            
+            // Encrypt the note data
+            const encryptedNote = encryptData(noteData, encryptionKey);
+            
+            // Store encrypted note
+            const notes = JSON.parse(localStorage.getItem(NOTES_KEY) || '{}');
+            notes[noteId] = {
+                data: encryptedNote,
+                createdAt: noteData.createdAt,
+                expiresAt: noteData.expiresAt,
+                viewLimit: viewLimit,
+                viewCount: 0,
+                hasPassword: !!password
+            };
+            localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+            
+            // Generate share link with encryption key
+            const shareUrl = `${window.location.origin}${window.location.pathname}?note=${noteId}#${encryptionKey}`;
+            
+            // Show success view
+            showSuccessView(shareUrl, noteData, destructTimer, viewLimit);
+            
+            // Clear form
+            clearForm();
+        }
+
+        function generateNoteId() {
+            return 'note_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        function clearForm() {
+            document.getElementById('noteTitle').value = '';
+            document.getElementById('noteContent').value = '';
+            document.getElementById('notePassword').value = '';
+            document.getElementById('charCount').textContent = '0';
+        }
+
+        // Load and decrypt note
+        function loadNote(noteId) {
+            const notes = JSON.parse(localStorage.getItem(NOTES_KEY) || '{}');
+            const noteRecord = notes[noteId];
+            
+            if (!noteRecord) {
+                showNoteExpired();
+                return;
+            }
+            
+            // Check if note has expired
+            if (new Date(noteRecord.expiresAt) < new Date()) {
+                // Delete expired note
+                delete notes[noteId];
+                localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+                showNoteExpired();
+                return;
+            }
+            
+            // Check view limit
+            if (noteRecord.viewLimit > 0 && noteRecord.viewCount >= noteRecord.viewLimit) {
+                // Delete note that exceeded view limit
+                delete notes[noteId];
+                localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+                showNoteExpired();
+                return;
+            }
+            
+            // Get encryption key from URL hash
+            const encryptionKey = window.location.hash.substring(1);
+            if (!encryptionKey) {
+                showNoteExpired();
+                return;
+            }
+            
+            // Decrypt note data
+            const decryptedData = decryptData(noteRecord.data, encryptionKey);
+            if (!decryptedData) {
+                showNoteExpired();
+                return;
+            }
+            
+            // Check password if required
+            if (decryptedData.hasPassword) {
+                showPasswordEntry(noteId, noteRecord, decryptedData, encryptionKey);
+            } else {
+                displayNote(noteId, noteRecord, decryptedData);
+            }
+        }
+
+        function showPasswordEntry(noteId, noteRecord, decryptedData, encryptionKey) {
+            showViewNoteView();
+            document.getElementById('passwordEntry').classList.remove('hidden');
+            document.getElementById('noteDisplay').classList.add('hidden');
+            
+            // Store data for unlock
+            window.pendingNote = { noteId, noteRecord, decryptedData, encryptionKey };
+        }
+
+        function unlockNote() {
+            const password = document.getElementById('viewPassword').value;
+            const { noteId, noteRecord, decryptedData } = window.pendingNote;
+            
+            if (!password) {
+                alert('Please enter the password!');
+                return;
+            }
+            
+            if (hashPassword(password) !== decryptedData.passwordHash) {
+                alert('Incorrect password!');
+                document.getElementById('viewPassword').value = '';
+                return;
+            }
+            
+            // Password correct, display note
+            document.getElementById('passwordEntry').classList.add('hidden');
+            displayNote(noteId, noteRecord, decryptedData);
+        }
+
+        function displayNote(noteId, noteRecord, decryptedData) {
+            // Increment view count
+            const notes = JSON.parse(localStorage.getItem(NOTES_KEY) || '{}');
+            notes[noteId].viewCount++;
+            localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+            
+            // Show note display
+            showViewNoteView();
+            document.getElementById('noteDisplay').classList.remove('hidden');
+            
+            // Populate note content
+            document.getElementById('displayTitle').textContent = decryptedData.title;
+            document.getElementById('displayContent').textContent = decryptedData.content;
+            
+            // Update views remaining
+            const viewsRemaining = document.getElementById('viewsRemaining');
+            if (noteRecord.viewLimit > 0) {
+                const remaining = noteRecord.viewLimit - notes[noteId].viewCount;
+                viewsRemaining.textContent = `👁️ ${remaining} views remaining`;
+                if (remaining <= 1) {
+                    viewsRemaining.classList.add('text-red-600', 'font-bold');
+                }
+            } else {
+                viewsRemaining.textContent = '👁️ Unlimited views';
+            }
+            
+            // Start countdown timer
+            startCountdown(decryptedData.expiresAt, noteId);
+            
+            // Store current note data for actions
+            window.currentNote = { noteId, noteRecord, decryptedData };
+        }
+
+        function startCountdown(expiresAt, noteId) {
+            const countdownDisplay = document.getElementById('countdownDisplay');
+            
+            function updateCountdown() {
+                const now = new Date().getTime();
+                const expiry = new Date(expiresAt).getTime();
+                const timeLeft = expiry - now;
+                
+                if (timeLeft <= 0) {
+                    // Note expired, burn it
+                    burnNoteById(noteId);
+                    return;
+                }
+                
+                const days = Math.floor(timeLeft / (1000 * 60 * 60 * 24));
+                const hours = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((timeLeft % (1000 * 60)) / 1000);
+                
+                let display = '';
+                if (days > 0) display += `${days}d `;
+                if (hours > 0) display += `${hours}h `;
+                if (minutes > 0) display += `${minutes}m `;
+                display += `${seconds}s`;
+                
+                countdownDisplay.textContent = display;
+                
+                // Add urgency styling for last minute
+                if (timeLeft < 60000) { // Less than 1 minute
+                    countdownDisplay.classList.add('text-red-500', 'pulse-animation');
+                }
+            }
+            
+            updateCountdown();
+            countdownInterval = setInterval(updateCountdown, 1000);
+        }
+
+        // Note actions
+        function copyNoteContent() {
+            const content = document.getElementById('displayContent').textContent;
+            
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(content).then(() => {
+                    showToast('Note content copied to clipboard!');
+                });
+            } else {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = content;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                showToast('Note content copied to clipboard!');
+            }
+        }
+
+        function burnNote() {
+            if (confirm('Are you sure you want to burn this note? This action cannot be undone!')) {
+                const { noteId } = window.currentNote;
+                burnNoteById(noteId);
+            }
+        }
+
+        function burnNoteById(noteId) {
+            // Add burn animation
+            const noteDisplay = document.getElementById('noteDisplay');
+            if (noteDisplay) {
+                noteDisplay.classList.add('burn-animation');
+            }
+            
+            // Clear countdown
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+            }
+            
+            // Delete note from storage
+            const notes = JSON.parse(localStorage.getItem(NOTES_KEY) || '{}');
+            delete notes[noteId];
+            localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+            
+            // Show burned message after animation
+            setTimeout(() => {
+                showNoteBurned();
+            }, 500);
+        }
+
+        // View management
+        function showCreateView() {
+            document.getElementById('createView').classList.remove('hidden');
+            document.getElementById('successView').classList.add('hidden');
+            document.getElementById('viewNoteView').classList.add('hidden');
+            
+            // Clear URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+
+        function showSuccessView(shareUrl, noteData, destructTimer, viewLimit) {
+            document.getElementById('createView').classList.add('hidden');
+            document.getElementById('successView').classList.remove('hidden');
+            document.getElementById('viewNoteView').classList.add('hidden');
+            
+            // Set share link
+            document.getElementById('shareLink').value = shareUrl;
+            
+            // Populate note details
+            const noteDetails = document.getElementById('noteDetails');
+            const destructTime = formatDuration(destructTimer);
+            const viewText = viewLimit === -1 ? 'Unlimited' : viewLimit;
+            
+            noteDetails.innerHTML = `
+                <h4 class="text-white font-semibold mb-3">📋 Note Details</h4>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-white/90">
+                    <div><strong>Title:</strong> ${noteData.title}</div>
+                    <div><strong>Created:</strong> ${new Date(noteData.createdAt).toLocaleString()}</div>
+                    <div><strong>Expires:</strong> ${new Date(noteData.expiresAt).toLocaleString()}</div>
+                    <div><strong>Self-destruct:</strong> ${destructTime}</div>
+                    <div><strong>View limit:</strong> ${viewText} views</div>
+                    <div><strong>Password:</strong> ${noteData.hasPassword ? 'Protected' : 'None'}</div>
+                </div>
+            `;
+        }
+
+        function showViewNoteView() {
+            document.getElementById('createView').classList.add('hidden');
+            document.getElementById('successView').classList.add('hidden');
+            document.getElementById('viewNoteView').classList.remove('hidden');
+        }
+
+        function showNoteExpired() {
+            showViewNoteView();
+            document.getElementById('passwordEntry').classList.add('hidden');
+            document.getElementById('noteDisplay').classList.add('hidden');
+            document.getElementById('noteExpired').classList.remove('hidden');
+        }
+
+        function showNoteBurned() {
+            const noteDisplay = document.getElementById('noteDisplay');
+            noteDisplay.innerHTML = `
+                <div class="text-center py-12">
+                    <div class="text-6xl mb-4">🔥</div>
+                    <h3 class="text-2xl font-bold text-gray-800 mb-4">Note Burned</h3>
+                    <p class="text-gray-600 mb-6">This note has been permanently destroyed and cannot be recovered.</p>
+                    <button onclick="goHome()" class="bg-orange-500 text-white font-semibold py-3 px-6 rounded-xl hover:bg-orange-600 transition-colors">
+                        🏠 Create New Note
+                    </button>
+                </div>
+            `;
+        }
+
+        // Utility functions
+        function formatDuration(seconds) {
+            if (seconds < 60) return `${seconds} seconds`;
+            if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes`;
+            if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours`;
+            return `${Math.floor(seconds / 86400)} days`;
+        }
+
+        function copyShareLink() {
+            const shareLink = document.getElementById('shareLink');
+            shareLink.select();
+            shareLink.setSelectionRange(0, 99999);
+            
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(shareLink.value).then(() => {
+                    showToast('Share link copied to clipboard!');
+                });
+            } else {
+                document.execCommand('copy');
+                showToast('Share link copied to clipboard!');
+            }
+        }
+
+        function shareNote() {
+            const shareUrl = document.getElementById('shareLink').value;
+            
+            if (navigator.share) {
+                navigator.share({
+                    title: 'Secure Note from Nexora',
+                    text: 'I\'ve shared a secure, encrypted note with you.',
+                    url: shareUrl
+                }).catch(err => console.log('Error sharing:', err));
+            } else {
+                copyShareLink();
+            }
+        }
+
+        function createAnother() {
+            showCreateView();
+        }
+
+        function goHome() {
+            showCreateView();
+        }
+
+        function showToast(message) {
+            // Create toast notification
+            const toast = document.createElement('div');
+            toast.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-xl shadow-lg z-50 transform translate-x-full transition-transform duration-300';
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            
+            // Animate in
+            setTimeout(() => {
+                toast.classList.remove('translate-x-full');
+            }, 100);
+            
+            // Animate out and remove
+            setTimeout(() => {
+                toast.classList.add('translate-x-full');
+                setTimeout(() => {
+                    document.body.removeChild(toast);
+                }, 300);
+            }, 3000);
+        }
+
+        // Cleanup expired notes periodically
+        function cleanupExpiredNotes() {
+            const notes = JSON.parse(localStorage.getItem(NOTES_KEY) || '{}');
+            const now = new Date();
+            let cleaned = false;
+            
+            Object.keys(notes).forEach(noteId => {
+                if (new Date(notes[noteId].expiresAt) < now) {
+                    delete notes[noteId];
+                    cleaned = true;
+                }
+            });
+            
+            if (cleaned) {
+                localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+            }
+        }
+
+        // Initialize app
+        document.addEventListener('DOMContentLoaded', function() {
+            init();
+            
+            // Cleanup expired notes on load
+            cleanupExpiredNotes();
+            
+            // Cleanup expired notes every 5 minutes
+            setInterval(cleanupExpiredNotes, 5 * 60 * 1000);
+        });
+
+        // Handle browser back/forward
+        window.addEventListener('popstate', init);
+        
+        // Clear countdown on page unload
+        window.addEventListener('beforeunload', function() {
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+            }
+        });
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97b3a6736581c4f0',t:'MTc1NzIyMTMwNy4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
